@@ -1,0 +1,41 @@
+# Бот без ИИ:            docker compose up -d --build
+# Бот + локальная модель: docker compose --profile ai up -d --build
+#                         docker compose exec ollama ollama pull qwen2.5:3b-instruct
+
+# Логи не растут бесконечно: до 3 файлов по 10 МБ на контейнер
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  bot:
+    build: .
+    image: vektor-znaniy-bot
+    env_file:
+      # токен и настройки модели; без файла бот подскажет, что задать
+      - path: bot/.env
+        required: false
+    environment:
+      # внутри compose Ollama доступна по имени сервиса, а не по localhost
+      LLM_API_BASE: http://ollama:11434/v1
+    restart: unless-stopped
+    logging: *logging
+
+  ollama:
+    image: ollama/ollama:0.12.6
+    profiles: ["ai"]
+    environment:
+      # модель остаётся в памяти, и первый вопрос после простоя не ждёт её загрузки
+      OLLAMA_KEEP_ALIVE: "-1"
+      # одна модель и один запрос за раз: на небольшом сервере иначе не хватит памяти
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_NUM_PARALLEL: "1"
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  ollama-models:
